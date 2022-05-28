@@ -61,24 +61,26 @@ async def find(update: Update, context: CallbackContext):
             i = int(i)
 
         cards = Card.where(q=f'name:{pokemon_name}')
-        images = []
-        for card in cards:
-            images.append(InputMediaPhoto(media=card.images.large, caption=f'{card.id}'))
-
         send_message_kwargs = {
             'chat_id': update.effective_chat.id,
-            'text': 'Please forward me the picture of the card that you have',
+            'text': 'Sorry, no pokemons found with this name',
         }
-        if i + 10 < len(images):
-            button_list = [
-                InlineKeyboardButton('Next', callback_data=f'{pokemon_name} {i + 10}'),
-            ]
-            send_message_kwargs['reply_markup'] = InlineKeyboardMarkup([button_list])
+        if cards:
+            images = []
+            for card in cards:
+                images.append(InputMediaPhoto(media=card.images.large, caption=f'{card.id}'))
 
-        await context.bot.send_media_group(
-            chat_id=update.effective_chat.id,
-            media=images[i:i + 10],
-        )
+            if i + 10 < len(images):
+                button_list = [
+                    InlineKeyboardButton('Next', callback_data=f'{pokemon_name} {i + 10}'),
+                ]
+                send_message_kwargs['reply_markup'] = InlineKeyboardMarkup([button_list])
+
+            send_message_kwargs['text'] = 'Please forward me the picture of the card that you have'
+            await context.bot.send_media_group(
+                chat_id=update.effective_chat.id,
+                media=images[i:i + 10],
+            )
         await context.bot.send_message(**send_message_kwargs)
 
 
