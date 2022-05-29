@@ -35,7 +35,7 @@ logging.basicConfig(
 commands = '''
 /start: Start Bot
 /find: Find all existing cards by the pokemon name
-/show: Show the list of your cards
+/list: Show the list of your cards
 /delete: Delete pokemon by the pokemon id 
 '''
 
@@ -92,7 +92,7 @@ async def find(update: Update, context: CallbackContext):
         await context.bot.send_message(**send_message_kwargs)
 
 
-async def show(update: Update, context: CallbackContext):
+async def list(update: Update, context: CallbackContext):
     message = 'Your Pokedex is empty'
 
     with Session(engine) as session:
@@ -172,14 +172,14 @@ if __name__ == '__main__':
 
     start_handler = CommandHandler('start', start)
     find_handler = CommandHandler('find', find)
-    show_handler = CommandHandler('show', show)
+    list_handler = CommandHandler('list', list)
     add_from_caption = MessageHandler(filters.PHOTO, add_from_caption)
     callback_handler = CallbackQueryHandler(find)
     delete_handler = CommandHandler('delete', delete)
 
     application.add_handler(start_handler)
     application.add_handler(find_handler)
-    application.add_handler(show_handler)
+    application.add_handler(list_handler)
     application.add_handler(add_from_caption)
     application.add_handler(callback_handler)
     application.add_handler(delete_handler)
