@@ -7,6 +7,7 @@ from sqlalchemy import and_, create_engine
 from sqlalchemy.orm import Session
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       InputMediaPhoto, Update)
+from telegram.error import BadRequest
 from telegram.ext import (ApplicationBuilder, CallbackContext,
                           CallbackQueryHandler, CommandHandler, MessageHandler,
                           filters)
@@ -78,10 +79,16 @@ async def find(update: Update, context: CallbackContext):
                 send_message_kwargs['reply_markup'] = InlineKeyboardMarkup([button_list])
 
             send_message_kwargs['text'] = 'Please forward me the picture of the card that you have'
-            await context.bot.send_media_group(
-                chat_id=update.effective_chat.id,
-                media=images[i:i + 10],
-            )
+            for j in range(-1, len(images[i:i + 10])):
+                media = images[i:i + 10] if j == -1 else images[i:i + j] + images[i + j + 1:i + 10]
+                try:
+                    await context.bot.send_media_group(
+                        chat_id=update.effective_chat.id,
+                        media=media,
+                    )
+                    break
+                except BadRequest:
+                    continue
         await context.bot.send_message(**send_message_kwargs)
 
 
