@@ -59,6 +59,7 @@ async def find(update: Update, context: CallbackContext):
         if update.callback_query:
             pokemon_name, i = update.callback_query.data.split()
             i = int(i)
+            await update.callback_query.answer()
 
         cards = Card.where(q=f'name:{pokemon_name}')
         send_message_kwargs = {
