@@ -12,7 +12,7 @@ from telegram.ext import (ApplicationBuilder, CallbackContext,
                           CallbackQueryHandler, CommandHandler, MessageHandler,
                           filters)
 
-from models import Base, MyPokedex
+from models import Base, Pokedex, Pokemon, User
 
 load_dotenv()
 
@@ -21,10 +21,11 @@ POKEMONTCG_IO_API_KEY = os.environ.get('POKEMONTCG_IO_API_KEY')
 POSTGRES_USER = os.environ.get('POSTGRES_USER')
 POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD')
 POSTGRES_DB = os.environ.get('POSTGRES_DB')
+POSTGRES_HOST_PORT = os.environ.get('POSTGRES_HOST_PORT')
 
 RestClient.configure(POKEMONTCG_IO_API_KEY)
 
-conn_url = f'postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@db/{POSTGRES_DB}'
+conn_url = f'postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST_PORT}/{POSTGRES_DB}'
 engine = create_engine(conn_url)
 
 logging.basicConfig(
@@ -41,6 +42,15 @@ commands = '''
 
 
 async def start(update: Update, context: CallbackContext):
+    with Session(engine) as session:
+        existing_user = session.query(User).filter(User.id == update.effective_user.id).first()
+        if not existing_user:
+            user = User(
+                id=update.effective_user.id,
+                username=update.effective_user.username,
+            )
+            session.add(user)
+            session.commit()
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text=f'Hello. Check the list of the commands:\n {commands}'
@@ -96,15 +106,14 @@ async def list(update: Update, context: CallbackContext):
     message = 'Your Pokedex is empty'
 
     with Session(engine) as session:
-        query = session.query(MyPokedex).filter(MyPokedex.user_id == update.effective_chat.id)
-        pokemon_ids = []
-        if query.all():
-            pokemon_ids = [row.pokemon_id for row in query]
+        query = session.query(Pokedex).filter(Pokedex.user_id == update.effective_user.id)
+        pokemons = [(row.pokemon.id, row.pokemon.name) for row in query] if query.all() else []
 
-    if pokemon_ids:
+    if pokemons:
+        pokemons.sort(key=lambda x: (x[1], x[0]))
         message = ''
-        for i, pokemon_id in enumerate(pokemon_ids, 1):
-            message += f'{i}. {Card.find(pokemon_id).name} ({pokemon_id})\n'
+        for i, (pokemon_id, pokemon_name) in enumerate(pokemons, 1):
+            message += f'{i}. {pokemon_name} ({pokemon_id})\n'
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -116,24 +125,40 @@ async def add_from_caption(update: Update, context: CallbackContext):
     message = 'Incorrect picture or pokemon id is missing, please try again'
     pokemon_id = update.message.caption
     if pokemon_id:
-        card = Card.find(pokemon_id)
+        with Session(engine) as session:
+            existing_pokemon = session.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
+            if not existing_pokemon:
+                card = Card.find(pokemon_id)
+                pokemon = Pokemon(
+                    id=card.id,
+                    name=card.name,
+                    hp=card.hp,
+                    image=card.images.large,
+                    rarity=card.rarity,
+                    supertype=card.supertype,
+                    subtypes=card.subtypes,
+                    types=card.types,
+                )
+                session.add(pokemon)
+                session.commit()
 
         with Session(engine) as session:
-            query = session.query(MyPokedex).filter(
+            query = session.query(Pokedex).filter(
                 and_(
-                    MyPokedex.user_id == update.effective_chat.id,
-                    MyPokedex.pokemon_id == pokemon_id
+                    Pokedex.user_id == update.effective_user.id,
+                    Pokedex.pokemon_id == pokemon_id
                 )
             )
-            message = f'You have {card.name} ({pokemon_id}) in your Pokedex already'
+            pokemon = session.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
+            message = f'You have {pokemon.name} ({pokemon.id}) in your Pokedex already'
             if not query.all():
-                obj = MyPokedex(
+                obj = Pokedex(
                     user_id=update.effective_user.id,
-                    pokemon_id=pokemon_id
+                    pokemon_id=pokemon.id
                 )
                 session.add(obj)
                 session.commit()
-                message = f'{card.name} ({pokemon_id}) has been added to your Pokedex'
+                message = f'{pokemon.name} ({pokemon.id}) has been added to your Pokedex'
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
@@ -147,17 +172,17 @@ async def delete(update: Update, context: CallbackContext):
         pokemon_id = context.args[0]
         with Session(engine) as session:
             message = "You don't have a pokemon with this id"
-            query = session.query(MyPokedex).filter(
+            query = session.query(Pokedex).filter(
                 and_(
-                    MyPokedex.user_id == update.effective_chat.id,
-                    MyPokedex.pokemon_id == pokemon_id
+                    Pokedex.user_id == update.effective_user.id,
+                    Pokedex.pokemon_id == pokemon_id
                 )
             )
             if query.all():
+                pokemon = session.query(Pokemon).filter(Pokemon.id == pokemon_id).first()
                 query.delete()
                 session.commit()
-                card = Card.find(pokemon_id)
-                message = f'{card.name} ({pokemon_id}) has been deleted from your Pokedex'
+                message = f'{pokemon.name} ({pokemon.id}) has been deleted from your Pokedex'
 
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
